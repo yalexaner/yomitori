@@ -1,0 +1,153 @@
+// schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:../data/flashcards.db"
+}
+
+// Main flashcard/vocabulary entry
+model Flashcard {
+  id              String   @id @default(cuid())
+
+  // Japanese text fields
+  wordKanji       String   // 食べる
+  wordKana        String   // たべる
+  wordRomaji      String?  // taberu (optional)
+
+  // Translation
+  meaningEnglish  String   // "to eat"
+
+  // Metadata
+  wordType        String   // "verb", "noun", "adjective", "particle", "character"
+  level           String?  // "beginner", "intermediate", "advanced"
+
+  // Audio
+  audioFilePath   String?  // path to MP3 file
+  audioGenerated  Boolean  @default(false)
+
+  // Context (future)
+  exampleSentence String?
+  notes           String?
+
+  // Relations
+  sourceImages    FlashcardImage[]
+  tags            FlashcardTag[]
+  generatedCards  GeneratedCard[]
+
+  // Timestamps
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([wordType])
+  @@index([createdAt])
+}
+
+// Generated card types from a flashcard
+model GeneratedCard {
+  id            String   @id @default(cuid())
+  flashcardId   String
+  flashcard     Flashcard @relation(fields: [flashcardId], references: [id], onDelete: Cascade)
+
+  // Card type: "recognition_jp_en", "recall_en_jp", "production_en_jp"
+  // For alphabet: "recognition_char_sound", "recall_sound_char", "production_sound_char"
+  cardType      String
+
+  // Front/Back content (pre-rendered for CSV export)
+  frontContent  String
+  backContent   String
+
+  // Whether this card was exported
+  exported      Boolean  @default(false)
+  exportedAt    DateTime?
+
+  createdAt     DateTime @default(now())
+
+  @@index([flashcardId])
+  @@index([cardType])
+}
+
+// Source images that were processed
+model SourceImage {
+  id              String   @id @default(cuid())
+  filename        String
+  originalPath    String
+  storedPath      String   // where we saved it locally
+  mimeType        String
+  fileSize        Int      // bytes
+
+  // Processing status
+  processed       Boolean  @default(false)
+  processingError String?
+
+  // Relations
+  flashcards      FlashcardImage[]
+
+  createdAt       DateTime @default(now())
+
+  @@index([processed])
+}
+
+// Many-to-many: Flashcards can come from multiple images
+model FlashcardImage {
+  flashcardId String
+  imageId     String
+  flashcard   Flashcard   @relation(fields: [flashcardId], references: [id], onDelete: Cascade)
+  image       SourceImage @relation(fields: [imageId], references: [id], onDelete: Cascade)
+
+  @@id([flashcardId, imageId])
+}
+
+// Tags for organization (future)
+model Tag {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  color       String?  // hex color for UI
+
+  flashcards  FlashcardTag[]
+
+  createdAt   DateTime @default(now())
+}
+
+// Many-to-many: Flashcards can have multiple tags
+model FlashcardTag {
+  flashcardId String
+  tagId       String
+  flashcard   Flashcard @relation(fields: [flashcardId], references: [id], onDelete: Cascade)
+  tag         Tag       @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([flashcardId, tagId])
+}
+
+// Export history (future)
+model ExportHistory {
+  id              String   @id @default(cuid())
+  filename        String
+  exportPath      String
+  cardCount       Int
+  includeAudio    Boolean
+
+  createdAt       DateTime @default(now())
+}
+
+// User settings (future)
+model Settings {
+  id                  Int      @id @default(1)
+
+  // TTS preferences
+  ttsProvider         String   @default("google") // "google", "elevenlabs"
+  ttsVoice            String   @default("ja-JP-Standard-A")
+  ttsSpeakingRate     Float    @default(1.0)
+
+  // Export preferences
+  defaultExportFormat String   @default("multi_csv") // "single_csv", "multi_csv"
+  includeAudioDefault Boolean  @default(true)
+
+  // UI preferences
+  theme               String   @default("light") // "light", "dark"
+
+  updatedAt           DateTime @updatedAt
+}
